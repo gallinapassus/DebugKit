@@ -16,11 +16,11 @@ Customise/setup your logging topics
 // Setup your logging topics
 extension DebugTopic {
     // Topics
-    public static var info = DebugTopic("info", level: 0)
-    public static var warning = DebugTopic("warning", level: 1)
-    public static var error = DebugTopic("error", level: 2)
+    public static let info = DebugTopic("info", level: 0)
+    public static let warning = DebugTopic("warning", level: 1)
+    public static let error = DebugTopic("error", level: 2)
     // A "mask" including all topics
-    public static var allTopics:DebugTopicSet = [
+    public static let allTopics:DebugTopicSet = [
         .info, .warning, .error
     ]
 }
@@ -49,10 +49,11 @@ func selectedLevels() {
 ```
 Send debug messages to specific FileHandle
 ```
-func info(to:FileHandle, _ message:String) {
-    to.dbg(.info, message) // sends "debug-info: All good" to stderr
-}
+let handle = FileHandle.standardError
+dbg(to: handle, .warning, [.info, .warning], "visible")
+dbg(to: handle, .error, [.info, .warning], "not visible")
 ```
+
 ## Important
 
 ### DebugTopic
@@ -65,10 +66,10 @@ dbg(DebugTopic("critical", level: 3), "Burn!") // sends "debug-critical: Burn!" 
 ```
 extension DebugTopic {
     // Topics
-    public static var info     = DebugTopic("info", level: 0)
-    public static var warning  = DebugTopic("warning", level: 1)
-    public static var error    = DebugTopic("error", level: 2)
-    public static var critical = DebugTopic("critical", level: 3)
+    public static let info     = DebugTopic("info", level: 0)
+    public static let warning  = DebugTopic("warning", level: 1)
+    public static let error    = DebugTopic("error", level: 2)
+    public static let critical = DebugTopic("critical", level: 3)
 }
 ```
 Now, same as above, but quicker and cleaner
@@ -84,11 +85,11 @@ It is possible to create overlapping DebugTopics like below
 ```
 extension DebugTopic {
     // Topics
-    public static var info = DebugTopic("info", level: 0)
-    public static var warning = DebugTopic("warning", level: 1)
-    public static var error = DebugTopic("error", level: 2)
-    public static var critical = DebugTopic("error", level: 3) // <-- label duplicate with .error
-    public static var telemetry = DebugTopic("telemetry", level: 0) // <-- level duplicate with .info
+    public static let info = DebugTopic("info", level: 0)
+    public static let warning = DebugTopic("warning", level: 1)
+    public static let error = DebugTopic("error", level: 2)
+    public static let critical = DebugTopic("error", level: 3) // <-- label duplicate with .error
+    public static let telemetry = DebugTopic("telemetry", level: 0) // <-- level duplicate with .info
 }
 ```
 
@@ -96,5 +97,5 @@ Arguably, this can be considered as a 'feature' or a 'developer error'.
 
 ## Limitations
 
-DebugKit supports 64 individual debug levels (0-63).
+DebugKit supports 64 individual debug levels (levels 0-62) for normal use and one pre-defined 'catch-all' level (level 63).
 

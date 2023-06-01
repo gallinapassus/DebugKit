@@ -15,6 +15,7 @@ let package = Package(
                  branch: "main"),
         .package(url: "git@github.com:gallinapassus/SemanticVersion.git",
                  branch: "main"),
+//        .package(path: "../Combinations"),
     ],
     targets: [
         .target(

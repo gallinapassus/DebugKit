@@ -2,17 +2,19 @@ import XCTest
 @testable import DebugKit
 
 extension DebugTopic {
-    public static var info = DebugTopic("info", level: 0)
-    public static var warning = DebugTopic("warning", level: 1)
-    public static var error = DebugTopic("error", level: 2)
-    public static var telemetry = DebugTopic("telemetry", level: 3)
-    public static var interaction = DebugTopic("interaction", level: 62)
-    public static var unlabeled = DebugTopic("", level: 63)
+    public static var info = DebugTopic(level: 0, "info")
+    public static var warning = DebugTopic(level: 1, "warning")
+    public static var error = DebugTopic(level: 2, "error")
+    public static var telemetry = DebugTopic(level: 3, "telemetry")
+    public static var status = DebugTopic(level: 61, "") // labeled as ""
+    public static var interaction = DebugTopic(level: 62) // unlabeled
+    public static var unlabeled = DebugTopic(level: 63, "all")
     
     public static var allTopics:DebugTopicSet = [
         .info, .warning, .error, .telemetry, .interaction
     ]
 }
+// TODO: Turn "tests" into actual tests :-)
 final class DebugKitTests: XCTestCase {
     func test_version() {
         print("DebugKit", DebugKit.version)
@@ -20,12 +22,11 @@ final class DebugKitTests: XCTestCase {
     }
     func test_SingleBitValue() {
         for i in 0..<MemoryLayout<UInt64>.size * 8 {
-            let topic = DebugTopic("a", level: i)
+            let topic = DebugTopic(level: i, "a")
             XCTAssertEqual(topic.level, i)
             XCTAssertEqual(topic.label, "a")
         }        
     }
-    // TODO: Add assertions
     func test_readme_1() throws {
         let mask = DebugTopic.allTopics
         dbg(.info, mask, "info")
@@ -38,7 +39,7 @@ final class DebugKitTests: XCTestCase {
     }
     func test_readme_3() {
         // Select the debug messages (mask) you are interested in
-        dbg(DebugTopic("critical", level: 63), "Burn!") // sends "debug-critical: Burn!" to stderr
+        dbg(DebugTopic(level: 63, "critical"), "Burn!") // sends "debug-critical: Burn!" to stderr
     }
     func test_timestamped() {
         let mask = DebugTopicSet([.info, .warning, .error, .telemetry, .interaction])
@@ -74,6 +75,35 @@ final class DebugKitTests: XCTestCase {
         dbg(.info, prefix: "dbg", labelSeparator: "_", "message")
         dbg(.info, prefix: "dbg", messageSeparator: "->", "message")
         dbg(.info, prefix: "dbg", labelSeparator: nil, messageSeparator: "->", "message")
+    }
+    func test_unleveled() {
+        dbg("kala")
+        dbg(prefix: "dbg", "kala")
+        dbg(prefix: "dbg", messageSeparator: ">", "kala")
+    }
+    func test_unlabeled() {
+        dbg(.status, "ok")
+        dbg(.status, labelSeparator: nil, "ok")
+        dbg(.status, labelSeparator: "_", "off")
+        
+        dbg(.interaction, "click")
+        dbg(.interaction, messageSeparator: nil, "click")
+        dbg(.interaction, messageSeparator: ">", "click")
+        dbg(.interaction, labelSeparator: ":", "click")
+        dbg(.interaction, labelSeparator: nil, "click")
+    }
+    func test_init_with_level() {
+        let warning = DebugTopic(integerLiteral: 1)
+        XCTAssertEqual(warning.level, 1)
+        XCTAssertNil(warning.label)
+        dbg(1, "Disk space low")
+        dbg(9, "Getting hot here...")
+    }
+    func test_init_with_mask_array_literal() {
+        let handle = FileHandle.standardError
+        dbg(to: handle, .warning, [.info, .warning], "visible")
+        dbg(to: handle, .error, [.info, .warning], "not visible")
+        dbg(to: handle, .info, [.info, .warning], { "abc" }())
     }
     func test_codable_singlebitvalue() {
         for i in 0..<MemoryLayout<UInt64>.size * 8 {
