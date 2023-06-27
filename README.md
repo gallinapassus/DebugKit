@@ -62,6 +62,22 @@ extension DebugTopic {
 }
 dbg(.critical, "Bang!") // sends "debug-4: Bang!" to stderr
 ```
+Send debug messages unconditionally to multiple topics at once
+```
+// unconditional, multiple topics at once
+dbg([.info, .warning, .error], "topic is active")
+// results into =>
+//  debug-info: topic is active
+//  debug-warning: topic is active
+//  debug-error: topic is active
+```
+Send debug messages conditionally to multiple topics at once
+```
+// conditional, multiple topics at once
+dbg([.info, .warning, .error], [.warning], "topic is active")
+// results into =>
+//  debug-warning: topic is active
+```
 Customise the prefix, label separator, message separator and terminator
 ```
 dbg(.telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
