@@ -2,7 +2,7 @@ import Foundation
 import SemanticVersion
 
 /// DebugKit semantic version
-public let version = SemanticVersion(0, 0, 2)
+public let version = SemanticVersion(0, 0, 3)
 
 /// A concrete type capable of representing any debug topic
 public struct DebugTopic : Hashable, Codable {
@@ -44,8 +44,11 @@ public struct DebugTopicSet : Hashable, Codable {
         self.values = valueSet
         self.isCatchAll = valueSet.map({ $0.level }).contains(63)
     }
-    public init(_ elements: [DebugTopic]) {
+    public init<T:Sequence>(_ elements: T) where T.Element == DebugTopic {
         self.init(Set(elements))
+    }
+    public init(_ topic: DebugTopic) {
+        self.init(Set([topic]))
     }
 }
 extension DebugTopicSet : SetAlgebra {
@@ -142,14 +145,14 @@ public struct SingleBitValue: Codable, Hashable {
     }
 }
 // MARK: -
-/// Send non-leveled debug information to `stderr` (unconditionally)
+/// Send un-leveled debug information to `stderr` (unconditionally)
 public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 prefix:String = "debug",
                 messageSeparator: String? = ": ",
                 terminator:String? = "\n",
                 _ message: @autoclosure () -> String) {
     guard let handle = handle else { return }
-    let data = _dbgmsg(DebugTopic(level: 63),
+    let data = _dbgmsg(.all,
                        prefix: prefix,
                        messageSeparator: messageSeparator,
                        terminator: terminator,
@@ -178,6 +181,28 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
                             message())
     _write(to: handle, data)
 }
+/// Send debug information conditionally to multiple topics at once
+///
+/// Example:
+///
+///     dbg([.info, .warning, .error], "topic is active")
+public func dbg(to handle: FileHandle? = FileHandle.standardError,
+                _ levels: [DebugTopic],
+                _ mask: DebugTopicSet,
+                prefix: String = "debug",
+                labelSeparator: String? = "-",
+                messageSeparator: String? = ": ",
+                terminator:String? = "\n",
+                _ message: @autoclosure () -> String) {
+    levels.forEach { level in
+        dbg(to: handle, level, mask,
+            prefix: prefix,
+            labelSeparator: labelSeparator,
+            messageSeparator: messageSeparator,
+            terminator: terminator,
+            message())
+    }
+}
 /// Send debug information unconditionally to file handle (default `stderr`)
 public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 _ level: DebugTopic,
@@ -195,6 +220,23 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
                             terminator: terminator,
                             message())
     _write(to: handle, data)
+}
+/// Send debug information unconditionally to file handle (default `stderr`)
+public func dbg(to handle: FileHandle? = FileHandle.standardError,
+                _ levels: [DebugTopic],
+                prefix: String = "debug",
+                labelSeparator: String? = "-",
+                messageSeparator: String? = ": ",
+                terminator:String? = "\n",
+                _ message: @autoclosure () -> String) {
+    levels.forEach { level in
+        dbg(to: handle, level, [.all],
+            prefix: prefix,
+            labelSeparator: labelSeparator,
+            messageSeparator: messageSeparator,
+            terminator: terminator,
+            message())
+    }
 }
 /// Get debug message as `Data`
 @inline(__always)

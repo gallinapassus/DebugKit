@@ -61,6 +61,14 @@ final class DebugKitTests: XCTestCase {
         dbg(.critical, "Bang!") // sends "debug-4: Bang!" to stderr
     }
     func test_readme_5() {
+        // all
+        dbg([.info, .warning, .error], [.all], "topic is active \(#line)")
+        // warning
+        dbg([.info, .warning, .error], [.warning], "topic is active \(#line)")
+        // unconditional -> all
+        dbg([.info, .warning, .error], "topic is active \(#line)")
+    }
+    func test_readme_6() {
         dbg(.telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
 
         // -or-
@@ -78,7 +86,7 @@ final class DebugKitTests: XCTestCase {
 
         appdbg(.telemetry, [.all], "start") // sends "myappname_telemetry; start ✓" to stderr
     }
-    func test_readme_6() {
+    func test_readme_7() {
         let mask:DebugTopicSet = [.all]
         
         _ = mask.contains(.info) // evaluates true
