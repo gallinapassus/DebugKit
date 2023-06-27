@@ -6,12 +6,11 @@ extension DebugTopic {
     public static var warning = DebugTopic(level: 1, "warning")
     public static var error = DebugTopic(level: 2, "error")
     public static var telemetry = DebugTopic(level: 3, "telemetry")
-    public static var status = DebugTopic(level: 61, "") // labeled as ""
-    public static var interaction = DebugTopic(level: 62) // unlabeled
-    public static var unlabeled = DebugTopic(level: 63, "all")
+    public static var critical = DebugTopic(level: 4) // unlabeled
+    public static var labeledEmpty = DebugTopic(level: 61, "") // labeled as ""
     
     public static var allTopics:DebugTopicSet = [
-        .info, .warning, .error, .telemetry, .interaction
+        .info, .warning, .error, .telemetry, .labeledEmpty, .critical
     ]
 }
 // TODO: Turn "tests" into actual tests :-)
@@ -25,25 +24,74 @@ final class DebugKitTests: XCTestCase {
             let topic = DebugTopic(level: i, "a")
             XCTAssertEqual(topic.level, i)
             XCTAssertEqual(topic.label, "a")
-        }        
+        }
     }
     func test_readme_1() throws {
-        let mask = DebugTopic.allTopics
-        dbg(.info, mask, "info")
+
+        func foobar() {
+            // Send debug messages unconditionally
+            dbg(.info, "All good") // sends "debug-info: All good" to stderr
+            dbg(.error, "Bang!") // sends "debug-error: Bang!" to stderr
+        }
+
+        foobar()
+
     }
     func test_readme_2() {
-        // Select the debug messages (mask) you are interested in
-        let mask = DebugTopicSet([.error])
-        dbg(.info, mask, "All good") // doesn't send anything to stderr
-        dbg(.error, mask, "Bang!") // sends "debug-error: Bang!" to stderr
+
+        func someFunction(debug mask:DebugTopicSet) {
+            // sends "debug-error: File not found" to stderr when .error is included in the mask
+            dbg(.error, mask, "File not found")
+        }
+
+        let mask:DebugTopicSet = [.info, .error]
+        // results into "debug-error: File not found" to be sent to stderr
+        someFunction(debug: mask)
+
     }
     func test_readme_3() {
-        // Select the debug messages (mask) you are interested in
-        dbg(DebugTopic(level: 63, "critical"), "Burn!") // sends "debug-critical: Burn!" to stderr
+
+        let handle = FileHandle.standardOutput
+        let mask:DebugTopicSet = [.info, .warning]
+        dbg(to: handle, .warning, mask, "visible") // sends "debug-warning: visible" to stdout
+        dbg(to: handle, .error, mask, "not visible") // doesn't send anything to stdout
+
+    }
+    func test_readme_4() {
+        dbg(.critical, "Bang!") // sends "debug-4: Bang!" to stderr
+    }
+    func test_readme_5() {
+        dbg(.telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
+
+        // -or-
+        // customise your own 'dbg'
+        func appdbg(to handle: FileHandle? = FileHandle.standardError,
+                    _ level: DebugTopic,
+                    _ mask: DebugTopicSet,
+                    _ message: @autoclosure () -> String) {
+            let prefix: String = "myappname"
+            let labelSeparator: String? = "_"
+            let messageSeparator: String? = "; "
+            let terminator:String? = " ✓\n"
+            dbg(to: handle, level, mask, prefix: prefix, labelSeparator: labelSeparator, messageSeparator: messageSeparator, terminator: terminator, message())
+        }
+
+        appdbg(.telemetry, [.all], "start") // sends "myappname_telemetry; start ✓" to stderr
+    }
+    func test_readme_6() {
+        let mask:DebugTopicSet = [.all]
+        
+        _ = mask.contains(.info) // evaluates true
+        _ = mask.contains(.all) // evaluates true
+        _ = mask.contains(DebugTopic(level: 42)) // evaluates true
+
+        XCTAssertTrue(mask.contains(.info)) // evaluates true
+        XCTAssertTrue(mask.contains(.all))  // evaluates true
+        XCTAssertTrue(mask.contains(DebugTopic(level: 42))) // evaluates true
     }
     func test_timestamped() {
-        let mask = DebugTopicSet([.info, .warning, .error, .telemetry, .interaction])
-        dbg(.info, mask, prefix: "\(Date())", labelSeparator: ":", "Timestamped debug entry.")
+//        let mask = DebugTopicSet([.info, .warning, .error, .telemetry])
+        dbg(.info, [.all], prefix: "\(Date())", labelSeparator: ":", "Timestamped debug entry.")
     }
     func test_formatting() {
         let tests:[((DebugTopic, String, String?, String?, String?, String), String)] = [
@@ -51,13 +99,13 @@ final class DebugKitTests: XCTestCase {
             ((.info, "debug", nil, nil, "\n", "kala"), "debuginfokala\n"),
             ((.info, "DBG", nil, nil, "\n", "kala"), "DBGinfokala\n"),
             ((.info, "", nil, nil, "\n", "kala"), "infokala\n"),
-            ((.unlabeled, "debug", nil, nil, "\n", "kala"), "debugkala\n"),
-            ((.unlabeled, "debug", "-", nil, "\n", "kala"), "debugkala\n"),
+            ((.critical, "debug", nil, nil, "\n", "kala"), "debugkala\n"),
+            ((.critical, "debug", "-", nil, "\n", "kala"), "debugkala\n"),
             ((.info, "debug", "-", nil, "\n", "kala"), "debug-infokala\n"),
             ((.info, "debug", "-", ">", "\n", "kala"), "debug-info>kala\n"),
             ((.info, "debug", nil, ">", "\n", "kala"), "debuginfo>kala\n"),
-            ((.unlabeled, "debug", nil, ">", "\n", "kala"), "debug>kala\n"),
-            ((.unlabeled, "", nil, nil, "\n", "kala"), "kala\n"),
+            ((.critical, "debug", nil, ">", "\n", "kala"), "debug>kala\n"),
+            ((.critical, "", nil, nil, "\n", "kala"), "kala\n"),
             ((.info, "debug", "_", ":", "[EOF]\n", "kala"), "debug_info:kala[EOF]\n"),
         ]
         for ((topic, prefix, lsep, msep, term, msg),expected) in tests {
@@ -82,15 +130,15 @@ final class DebugKitTests: XCTestCase {
         dbg(prefix: "dbg", messageSeparator: ">", "kala")
     }
     func test_unlabeled() {
-        dbg(.status, "ok")
-        dbg(.status, labelSeparator: nil, "ok")
-        dbg(.status, labelSeparator: "_", "off")
+        dbg(.labeledEmpty, "ok")
+        dbg(.labeledEmpty, labelSeparator: nil, "ok")
+        dbg(.labeledEmpty, labelSeparator: "_", "ok")
         
-        dbg(.interaction, "click")
-        dbg(.interaction, messageSeparator: nil, "click")
-        dbg(.interaction, messageSeparator: ">", "click")
-        dbg(.interaction, labelSeparator: ":", "click")
-        dbg(.interaction, labelSeparator: nil, "click")
+        dbg(.critical, "click")
+        dbg(.critical, messageSeparator: nil, "click")
+        dbg(.critical, messageSeparator: ">", "click")
+        dbg(.critical, labelSeparator: ":", "click")
+        dbg(.critical, labelSeparator: nil, "click")
     }
     func test_init_with_level() {
         let warning = DebugTopic(integerLiteral: 1)
@@ -103,7 +151,36 @@ final class DebugKitTests: XCTestCase {
         let handle = FileHandle.standardError
         dbg(to: handle, .warning, [.info, .warning], "visible")
         dbg(to: handle, .error, [.info, .warning], "not visible")
-        dbg(to: handle, .info, [.info, .warning], { "abc" }())
+        dbg(to: handle, .info, [.info, .warning], "abc")
+    }
+    func test_topic_all() {
+        let handle = FileHandle.standardError
+        let infoMask = DebugTopicSet([.info])
+        let allMask = DebugTopicSet([.all])
+        if infoMask.contains(.info) {
+            dbg(to: handle, .warning, "ok \(#line)")
+            dbg(to: handle, .error, "ok \(#line)")
+            dbg(to: handle, .info, "ok \(#line)")
+            dbg(to: handle, .all, "ok \(#line)")
+        }
+        if infoMask.contains(.all) {
+            dbg(to: handle, .warning, "test failed, if you see this \(#line)")
+            dbg(to: handle, .error, "test failed, if you see this \(#line)")
+            dbg(to: handle, .info, "test failed, if you see this \(#line)")
+            dbg(to: handle, .all, "test failed, if you see this \(#line)")
+        }
+        if allMask.contains(.info) {
+            dbg(to: handle, .warning, "ok \(#line)")
+            dbg(to: handle, .error, "ok \(#line)")
+            dbg(to: handle, .info, "ok \(#line)")
+            dbg(to: handle, .all, "ok \(#line)")
+        }
+        if allMask.contains(.all) {
+            dbg(to: handle, .warning, "ok \(#line)")
+            dbg(to: handle, .error, "ok \(#line)")
+            dbg(to: handle, .info, "ok \(#line)")
+            dbg(to: handle, .all, "ok \(#line)")
+        }
     }
     func test_codable_singlebitvalue() {
         for i in 0..<MemoryLayout<UInt64>.size * 8 {

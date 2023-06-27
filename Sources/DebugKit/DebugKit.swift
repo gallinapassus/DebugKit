@@ -2,17 +2,12 @@ import Foundation
 import SemanticVersion
 
 /// DebugKit semantic version
-public let version = SemanticVersion(0, 0, 1)
+public let version = SemanticVersion(0, 0, 2)
 
 /// A concrete type capable of representing any debug topic
 public struct DebugTopic : Hashable, Codable {
     public static func == (lhs: DebugTopic, rhs: DebugTopic) -> Bool {
         lhs.level == rhs.level
-    }
-    @available(*, deprecated, message: "Use init(level:_:) instead")
-    public init(_ label:String, level:Int) {
-        self.label = label
-        self.bitValue = SingleBitValue(position: level)
     }
     public init(level:Int, _ label:String? = nil) {
         self.bitValue = SingleBitValue(position: level)
@@ -44,10 +39,10 @@ extension DebugTopic {
 // wildcard evaluation is a simple Bool value comparison.
 public struct DebugTopicSet : Hashable, Codable {
     private var values:Set<DebugTopic>
-    private (set) public var isWildcard:Bool = false
+    private (set) public var isCatchAll:Bool = false
     public init(_ valueSet: Set<DebugTopic>) {
         self.values = valueSet
-        self.isWildcard = valueSet.map({ $0.level }).contains(63)
+        self.isCatchAll = valueSet.map({ $0.level }).contains(63)
     }
     public init(_ elements: [DebugTopic]) {
         self.init(Set(elements))
@@ -92,6 +87,9 @@ extension DebugTopicSet : SetAlgebra {
     
     public mutating func formSymmetricDifference(_ other: __owned DebugTopicSet) {
         return values.formSymmetricDifference(other)
+    }
+    public func contains(_ member: DebugTopic) -> Bool {
+        isCatchAll ? true : values.contains(member)
     }
 }
 extension DebugTopicSet : Sequence {
@@ -158,7 +156,7 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
                        message())
     _write(to: handle, data)
 }
-/// Send debug information to file handle (default `stderr`)
+/// Send debug information conditionally to file handle (default `stderr`)
 public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 _ level: DebugTopic,
                 _ mask: DebugTopicSet,
@@ -169,18 +167,18 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 _ message: @autoclosure () -> String) {
 
     guard let handle = handle else { return }
-    let data:Data
-    guard mask.contains(level) || mask.isWildcard else {
+    guard mask.contains(level) || mask.isCatchAll else {
         return
     }
-    data = _dbgmsg(level,
-                   prefix: prefix,
-                   labelSeparator: labelSeparator,
-                   messageSeparator: messageSeparator,
-                   terminator: terminator,
-                   message())
+    let data:Data = _dbgmsg(level,
+                            prefix: prefix,
+                            labelSeparator: labelSeparator,
+                            messageSeparator: messageSeparator,
+                            terminator: terminator,
+                            message())
     _write(to: handle, data)
 }
+/// Send debug information unconditionally to file handle (default `stderr`)
 public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 _ level: DebugTopic,
                 prefix: String = "debug",
@@ -190,12 +188,12 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
                 _ message: @autoclosure () -> String) {
     
     guard let handle = handle else { return }
-    let data = _dbgmsg(level,
-                       prefix: prefix,
-                       labelSeparator: labelSeparator,
-                       messageSeparator: messageSeparator,
-                       terminator: terminator,
-                       message())
+    let data:Data = _dbgmsg(level,
+                            prefix: prefix,
+                            labelSeparator: labelSeparator,
+                            messageSeparator: messageSeparator,
+                            terminator: terminator,
+                            message())
     _write(to: handle, data)
 }
 /// Get debug message as `Data`
