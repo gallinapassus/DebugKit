@@ -8,7 +8,7 @@ Lightweight logging.
 import DebugKit
 ```
 
-## Example
+## Example(s)
 
 Customise/setup your logging topics
 
@@ -19,7 +19,7 @@ extension DebugTopic {
     public static let info = DebugTopic("info", level: 0)
     public static let warning = DebugTopic("warning", level: 1)
     public static let error = DebugTopic("error", level: 2)
-    // A "mask" including all topics
+    // A allTopics "mask" including all topics
     public static let allTopics:DebugTopicSet = [
         .info, .warning, .error
     ]
@@ -29,54 +29,60 @@ Send debug messages unconditionally
 ```
 func foobar() {
     // Send debug messages unconditionally
-    dbg(.info,"All good") // sends "debug-info: All good" to stderr
+    dbg(.info, "All good") // sends "debug-info: All good" to stderr
     dbg(.error, "Bang!") // sends "debug-error: Bang!" to stderr
 }
 ```
 Use "mask" to selectively send debug messages 
 ```
-func allLevels() {
-    // Select the debug messages (mask) you are interested in
-    let mask = DebugTopic.allTopics
-    dbg(.info, mask, "All good") // sends "debug-info: All good" to stderr
+func someFunction(debug mask:DebugTopicSet) {
+    dbg(.error, mask, "File not found")
 }
-func selectedLevels() {
-    // Select the debug messages (mask) you are interested in
-    let mask = DebugTopicSet([.error])
-    dbg(.info, mask, "All good") // doesn't send anything to stderr
-    dbg(.error, mask, "Bang!") // sends "debug-error: Bang!" to stderr
-}
+
+let mask:DebugTopicSet = [.info, .error]
+// results into "debug-error: File not found" to be sent to stderr
+someFunction(debug: mask)
 ```
 Send debug messages to specific FileHandle
 ```
-let handle = FileHandle.standardError
-dbg(to: handle, .warning, [.info, .warning], "visible")
-dbg(to: handle, .error, [.info, .warning], "not visible")
+let handle = FileHandle.standardOutput
+let mask:DebugTopicSet = [.info, .warning]
+dbg(to: handle, .warning, mask, "visible")   // sends "debug-warning: visible" to stdout
+dbg(to: handle, .error, mask, "not visible") // doesn't send anything to stdout
 ```
-
-## Important
-
-### DebugTopic
-
-It is possible to use dbg() like...
-```
-dbg(DebugTopic("critical", level: 3), "Burn!") // sends "debug-critical: Burn!" to stderr
-```
-...but it is quite cumbersome. Extending the DebugTopic with static topics makes the use shorter and quicker with automatic suggestions/completions.
+Use unlabeled debug levels
 ```
 extension DebugTopic {
     // Topics
-    public static let info     = DebugTopic("info", level: 0)
-    public static let warning  = DebugTopic("warning", level: 1)
-    public static let error    = DebugTopic("error", level: 2)
-    public static let critical = DebugTopic("critical", level: 3)
+    public static let info = DebugTopic(level: 0)
+    public static let telemetry = DebugTopic(level: 1)
+    public static let warning = DebugTopic(level: 2)
+    public static let error = DebugTopic(level: 3)
+    public static let critical = DebugTopic(level: 4)
 }
+dbg(.critical, "Bang!") // sends "debug-4: Bang!" to stderr
 ```
-Now, same as above, but quicker and cleaner
+Customise the prefix, label separator, message separator and terminator
+```
+dbg(.telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
 
+// -or- for convenience
+// make your own 'appdbg' function
+func appdbg(to handle: FileHandle? = FileHandle.standardError,
+            _ level: DebugTopic,
+            _ mask: DebugTopicSet,
+            _ message: @autoclosure () -> String) {
+    let prefix: String = "myappname"
+    let labelSeparator: String? = "_"
+    let messageSeparator: String? = "; "
+    let terminator:String? = " ✓\n"
+    dbg(to: handle, level, mask, prefix: prefix, labelSeparator: labelSeparator, messageSeparator: messageSeparator, terminator: terminator, message())
+}
+
+appdbg(.telemetry, [.all], "start") // sends "myappname_telemetry; start ✓" to stderr
 ```
-dbg(.critical, "Burn!") // sends "debug-critical: Burn!" to stderr
-```
+
+## Important
 
 ### Overlaps
 
@@ -85,17 +91,26 @@ It is possible to create overlapping DebugTopics like below
 ```
 extension DebugTopic {
     // Topics
-    public static let info = DebugTopic("info", level: 0)
-    public static let warning = DebugTopic("warning", level: 1)
-    public static let error = DebugTopic("error", level: 2)
-    public static let critical = DebugTopic("error", level: 3) // <-- label duplicate with .error
-    public static let telemetry = DebugTopic("telemetry", level: 0) // <-- level duplicate with .info
+    public static let info = DebugTopic(level: 0, "info")
+    public static let warning = DebugTopic(level: 1, "warning")
+    public static let error = DebugTopic(level: 2, "error")
+    public static let critical = DebugTopic(level: 3, "error") // <-- label duplicate with .error
+    public static let telemetry = DebugTopic(level: 0, "telemetry") // <-- level duplicate with .info
 }
 ```
 
-Arguably, this can be considered as a 'feature' or a 'developer error'.
+Arguably, this can be considered as a 'feature' or a 'DebugKit bug' :-)
 
 ## Limitations
 
-DebugKit supports 64 individual debug levels (levels 0-62) for normal use and one pre-defined 'catch-all' level (level 63).
+DebugKit supports 64 individual debug levels.
 
+Levels 0-62 are for normal use and level 63 (labeled as "all") can be used to catch-all levels.
+
+```
+let mask:DebugTopicSet = [.all]
+
+mask.contains(.info) // evaluates true
+mask.contains(.all) // evaluates true
+mask.contains(DebugTopic(level: 42)) // evaluates true
+```
