@@ -278,9 +278,18 @@ fileprivate func _dbgmsg(_ level:DebugTopic,
 @inline(__always)
 fileprivate func _write(to handle: FileHandle, _ data:Data) {
     handle.write(data)
+#if os(macOS)
     if #available(macOS 10.15, *) {
         try? handle.synchronize()
     } else {
         // no flushing
     }
+#elseif os(iOS)
+    if #available(iOS 13.0, *) {
+        try? handle.synchronize()
+    } else {
+        // no flushing
+    }
+#else
+#endif
 }
