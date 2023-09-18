@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git",
                  branch: "main"),
-        .package(url: "git@github.com:gallinapassus/SemanticVersion.git",
+        .package(url: "https://github.com/gallinapassus/SemanticVersion.git",
                  branch: "main"),
 //        .package(path: "../Combinations"),
     ],
