@@ -1,4 +1,6 @@
 import XCTest
+import Foundation
+import Darwin
 @testable import DebugKit
 
 extension DebugTopic {
@@ -10,67 +12,130 @@ extension DebugTopic {
     public static var labeledEmpty = DebugTopic(level: 61, "") // labeled as ""
     
     public static var allTopics:DebugTopicSet = [
-        .info, .warning, .error, .telemetry, .labeledEmpty, .critical
+        .info, .warning, .error, .telemetry, .critical, .labeledEmpty
     ]
 }
-// TODO: Turn "tests" into actual tests :-)
 final class DebugKitTests: XCTestCase {
+    var handle:FileHandle = FileHandle.standardError
+    var path:String! = nil
+    override func setUp() {
+        let tmpFilename = String(
+            (0..<8).map({ _ in String("abc".randomElement()!) }).joined()
+        )
+        if FileManager.default.createFile(atPath: tmpFilename, contents: nil) {
+            self.path = tmpFilename
+            if let h = FileHandle(forWritingAtPath: tmpFilename) {
+                self.handle = h
+            }
+            else {
+                fatalError("\(#function) failed")
+            }
+        }
+        else {
+            fatalError("\(#function) failed")
+        }
+    }
+    override func tearDown() {
+        do {
+            try self.handle.close()
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+        if let path = path {
+            do { try FileManager.default.removeItem(atPath: path) }
+            catch {
+                fatalError("failed to remove \(path)")
+            }
+        }
+    }
+    //    private var stack:[String] = []
     func test_version() {
         print("DebugKit", DebugKit.version)
         XCTAssertFalse(DebugKit.version.isStable)
     }
-    func test_SingleBitValue() {
-        for i in 0..<MemoryLayout<UInt64>.size * 8 {
-            let topic = DebugTopic(level: i, "a")
-            XCTAssertEqual(topic.level, i)
-            XCTAssertEqual(topic.label, "a")
+    var log:String {
+        do {
+            let stderr = try String(contentsOfFile: path)
+            return stderr
+        } catch {
+            fatalError()
         }
     }
     func test_readme_1() throws {
-
-        func foobar() {
-            // Send debug messages unconditionally
-            dbg(.info, "All good") // sends "debug-info: All good" to stderr
-            dbg(.error, "Bang!") // sends "debug-error: Bang!" to stderr
-        }
-
-        foobar()
-
+        dbg(to: handle, .info, "All good") // sends "debug-info: All good" to stderr
+        dbg(to: handle, .error, "Bang!") // sends "debug-error: Bang!" to stderr
+        XCTAssertEqual(log,
+                            """
+                            debug-info: All good
+                            debug-error: Bang!
+                            
+                            """
+        )
+        //print(#function, self.stack)
     }
     func test_readme_2() {
-
+        
         func someFunction(debug mask:DebugTopicSet) {
             // sends "debug-error: File not found" to stderr when .error is included in the mask
-            dbg(.error, mask, "File not found")
+            dbg(to: handle, .error, mask, "File not found")
         }
-
+        
         let mask:DebugTopicSet = [.info, .error]
         // results into "debug-error: File not found" to be sent to stderr
         someFunction(debug: mask)
-
+        XCTAssertEqual(log,
+                            """
+                            debug-error: File not found
+                            
+                            """
+        )
     }
     func test_readme_3() {
-
-        let handle = FileHandle.standardOutput
+        
+        //let handle = FileHandle.standardOutput
         let mask:DebugTopicSet = [.info, .warning]
         dbg(to: handle, .warning, mask, "visible") // sends "debug-warning: visible" to stdout
         dbg(to: handle, .error, mask, "not visible") // doesn't send anything to stdout
-
+        XCTAssertEqual(log,
+                            """
+                            debug-warning: visible
+                            
+                            """
+        )
+        
     }
     func test_readme_4() {
-        dbg(.critical, "Bang!") // sends "debug-4: Bang!" to stderr
+        dbg(to: handle, .critical, "Bang!") // sends "debug-4: Bang!" to stderr
+        XCTAssertEqual(log,
+                            """
+                            debug-4: Bang!
+                            
+                            """
+        )
     }
     func test_readme_5() {
         // all
-        dbg([.info, .warning, .error], [.all], "topic is active \(#line)")
+        dbg(to: handle, [.info, .warning, .error], [.all], "topic is active")
         // warning
-        dbg([.info, .warning, .error], [.warning], "topic is active \(#line)")
+        dbg(to: handle, [.info, .warning, .error], [.warning], "topic is active")
         // unconditional -> all
-        dbg([.info, .warning, .error], "topic is active \(#line)")
+        dbg(to: handle, [.info, .warning, .error], "topic is active")
+        XCTAssertEqual(log,
+                            """
+                            debug-info: topic is active
+                            debug-warning: topic is active
+                            debug-error: topic is active
+                            debug-warning: topic is active
+                            debug-info: topic is active
+                            debug-warning: topic is active
+                            debug-error: topic is active
+                            
+                            """
+        )
     }
     func test_readme_6() {
-        dbg(.telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
-
+        dbg(to:handle, .telemetry, prefix: "myappname", labelSeparator: "_", messageSeparator: "; ", terminator: " ✓\n", "start") // sends "myappname_telemetry; start ✓" to stderr
+        
         // -or-
         // customise your own 'dbg'
         func appdbg(to handle: FileHandle? = FileHandle.standardError,
@@ -83,8 +148,15 @@ final class DebugKitTests: XCTestCase {
             let terminator:String? = " ✓\n"
             dbg(to: handle, level, mask, prefix: prefix, labelSeparator: labelSeparator, messageSeparator: messageSeparator, terminator: terminator, message())
         }
-
-        appdbg(.telemetry, [.all], "start") // sends "myappname_telemetry; start ✓" to stderr
+        
+        appdbg(to: handle, .telemetry, [.all], "start") // sends "myappname_telemetry; start ✓" to stderr
+        XCTAssertEqual(log,
+                            """
+                            myappname_telemetry; start ✓
+                            myappname_telemetry; start ✓
+                            
+                            """
+        )
     }
     func test_readme_7() {
         let mask:DebugTopicSet = [.all]
@@ -92,14 +164,20 @@ final class DebugKitTests: XCTestCase {
         _ = mask.contains(.info) // evaluates true
         _ = mask.contains(.all) // evaluates true
         _ = mask.contains(DebugTopic(level: 42)) // evaluates true
-
+        
         XCTAssertTrue(mask.contains(.info)) // evaluates true
         XCTAssertTrue(mask.contains(.all))  // evaluates true
         XCTAssertTrue(mask.contains(DebugTopic(level: 42))) // evaluates true
     }
     func test_timestamped() {
-//        let mask = DebugTopicSet([.info, .warning, .error, .telemetry])
-        dbg(.info, [.all], prefix: "\(Date())", labelSeparator: ":", "Timestamped debug entry.")
+        let d = Date(timeIntervalSince1970: 1_000_000_000)
+        dbg(to: handle, .info, [.all], prefix: "\(d)", labelSeparator: ":", "Timestamped debug entry.")
+        XCTAssertEqual(log,
+                            """
+                            2001-09-09 01:46:40 +0000:info: Timestamped debug entry.
+                            
+                            """
+        )
     }
     func test_formatting() {
         let tests:[((DebugTopic, String, String?, String?, String?, String), String)] = [
@@ -107,145 +185,176 @@ final class DebugKitTests: XCTestCase {
             ((.info, "debug", nil, nil, "\n", "kala"), "debuginfokala\n"),
             ((.info, "DBG", nil, nil, "\n", "kala"), "DBGinfokala\n"),
             ((.info, "", nil, nil, "\n", "kala"), "infokala\n"),
-            ((.critical, "debug", nil, nil, "\n", "kala"), "debugkala\n"),
-            ((.critical, "debug", "-", nil, "\n", "kala"), "debugkala\n"),
+            ((.critical, "debug", nil, nil, "\n", "kala"), "debug4kala\n"),
+            ((.critical, "debug", "-", nil, "\n", "kala"), "debug-4kala\n"),
             ((.info, "debug", "-", nil, "\n", "kala"), "debug-infokala\n"),
             ((.info, "debug", "-", ">", "\n", "kala"), "debug-info>kala\n"),
             ((.info, "debug", nil, ">", "\n", "kala"), "debuginfo>kala\n"),
-            ((.critical, "debug", nil, ">", "\n", "kala"), "debug>kala\n"),
-            ((.critical, "", nil, nil, "\n", "kala"), "kala\n"),
+            ((.critical, "debug", nil, ">", "\n", "kala"), "debug4>kala\n"),
+            ((.critical, "", nil, nil, "\n", "kala"), "4kala\n"),
             ((.info, "debug", "_", ":", "[EOF]\n", "kala"), "debug_info:kala[EOF]\n"),
         ]
+        var acc = ""
         for ((topic, prefix, lsep, msep, term, msg),expected) in tests {
-            dbg(topic, prefix: prefix,
+            dbg(to: handle, topic, prefix: prefix,
                 labelSeparator: lsep, messageSeparator: msep, terminator: term,
                 msg)
-            print(expected, terminator: "")
-            print("---")
+            acc += expected
         }
-        dbg(.info, "message")
-        dbg(.info, prefix: "dbg", "message")
-        dbg(.info, labelSeparator: "_", "message")
-        dbg(.info, messageSeparator: "->", "message")
-        dbg(.info, terminator: "⮐\n", "message")
-        dbg(.info, prefix: "dbg", labelSeparator: "_", "message")
-        dbg(.info, prefix: "dbg", messageSeparator: "->", "message")
-        dbg(.info, prefix: "dbg", labelSeparator: nil, messageSeparator: "->", "message")
+        dbg(to: handle, .info, "message")
+        dbg(to: handle, .info, prefix: "dbg", "message")
+        dbg(to: handle, .info, labelSeparator: "_", "message")
+        dbg(to: handle, .info, messageSeparator: "->", "message")
+        dbg(to: handle, .info, terminator: "⮐\n", "message")
+        dbg(to: handle, .info, prefix: "dbg", labelSeparator: "_", "message")
+        dbg(to: handle, .info, prefix: "dbg", messageSeparator: "->", "message")
+        dbg(to: handle, .info, prefix: "dbg", labelSeparator: nil, messageSeparator: "->", "message")
+        XCTAssertEqual(log, acc +
+                            """
+                            debug-info: message
+                            dbg-info: message
+                            debug_info: message
+                            debug-info->message
+                            debug-info: message⮐
+                            dbg_info: message
+                            dbg-info->message
+                            dbginfo->message
+                            
+                            """
+        )
     }
     func test_unleveled() {
-        dbg("kala")
-        dbg(prefix: "dbg", "kala")
-        dbg(prefix: "dbg", messageSeparator: ">", "kala")
+        dbg(to: handle, "kala")
+        dbg(to: handle, prefix: "dbg", "kala")
+        dbg(to: handle, prefix: "dbg", messageSeparator: ">", "kala")
+        XCTAssertEqual(log,
+                            """
+                            debug-all: kala
+                            dbg-all: kala
+                            dbg-all>kala
+                            
+                            """
+        )
     }
     func test_unlabeled() {
-        dbg(.labeledEmpty, "ok")
-        dbg(.labeledEmpty, labelSeparator: nil, "ok")
-        dbg(.labeledEmpty, labelSeparator: "_", "ok")
+        dbg(to: handle, .labeledEmpty, "ok")
+        dbg(to: handle, .labeledEmpty, labelSeparator: nil, "ok")
+        dbg(to: handle, .labeledEmpty, labelSeparator: "_", "ok")
         
-        dbg(.critical, "click")
-        dbg(.critical, messageSeparator: nil, "click")
-        dbg(.critical, messageSeparator: ">", "click")
-        dbg(.critical, labelSeparator: ":", "click")
-        dbg(.critical, labelSeparator: nil, "click")
+        dbg(to: handle, .critical, "click")
+        dbg(to: handle, .critical, messageSeparator: nil, "click")
+        dbg(to: handle, .critical, messageSeparator: ">", "click")
+        dbg(to: handle, .critical, labelSeparator: ":", "click")
+        dbg(to: handle, .critical, labelSeparator: nil, "click")
+        
+        XCTAssertEqual(log,
+                            """
+                            debug-: ok
+                            debug: ok
+                            debug_: ok
+                            debug-4: click
+                            debug-4click
+                            debug-4>click
+                            debug:4: click
+                            debug4: click
+                            
+                            """
+        )
     }
+    
     func test_init_with_level() {
-        let warning = DebugTopic(integerLiteral: 1)
+        //        let warning = DebugTopic(integerLiteral: 1)
+        let warning = DebugTopic(level: 1)
         XCTAssertEqual(warning.level, 1)
         XCTAssertNil(warning.label)
-        dbg(1, "Disk space low")
-        dbg(9, "Getting hot here...")
+        dbg(to: handle, 1, "Disk space low")
+        dbg(to: handle, 9, "Getting hot here...")
+        
+        XCTAssertEqual(log,
+                            """
+                            debug-1: Disk space low
+                            debug-9: Getting hot here...
+                            
+                            """
+        )
     }
     func test_init_with_mask_array_literal() {
-        let handle = FileHandle.standardError
+        //let handle = FileHandle.standardError
         dbg(to: handle, .warning, [.info, .warning], "visible")
         dbg(to: handle, .error, [.info, .warning], "not visible")
-        dbg(to: handle, .info, [.info, .warning], "abc")
+        dbg(to: handle, .info, [.info, .warning], "also visible")
+        
+        XCTAssertEqual(log,
+                            """
+                            debug-warning: visible
+                            debug-info: also visible
+                            
+                            """
+        )
     }
     func test_topic_all() {
-        let handle = FileHandle.standardError
+        //let handle = FileHandle.standardError
         let infoMask = DebugTopicSet([.info])
         let allMask = DebugTopicSet([.all])
         if infoMask.contains(.info) {
-            dbg(to: handle, .warning, "ok \(#line)")
-            dbg(to: handle, .error, "ok \(#line)")
-            dbg(to: handle, .info, "ok \(#line)")
-            dbg(to: handle, .all, "ok \(#line)")
+            dbg(to: handle, .warning, "ok")
+            dbg(to: handle, .error, "ok")
+            dbg(to: handle, .info, "ok")
+            dbg(to: handle, .all, "ok")
         }
         if infoMask.contains(.all) {
-            dbg(to: handle, .warning, "test failed, if you see this \(#line)")
-            dbg(to: handle, .error, "test failed, if you see this \(#line)")
-            dbg(to: handle, .info, "test failed, if you see this \(#line)")
-            dbg(to: handle, .all, "test failed, if you see this \(#line)")
+            dbg(to: handle, .warning, "test failed, if you see this")
+            dbg(to: handle, .error, "test failed, if you see this")
+            dbg(to: handle, .info, "test failed, if you see this")
+            dbg(to: handle, .all, "test failed, if you see this")
         }
         if allMask.contains(.info) {
-            dbg(to: handle, .warning, "ok \(#line)")
-            dbg(to: handle, .error, "ok \(#line)")
-            dbg(to: handle, .info, "ok \(#line)")
-            dbg(to: handle, .all, "ok \(#line)")
+            dbg(to: handle, .warning, "ok")
+            dbg(to: handle, .error, "ok")
+            dbg(to: handle, .info, "ok")
+            dbg(to: handle, .all, "ok")
         }
         if allMask.contains(.all) {
-            dbg(to: handle, .warning, "ok \(#line)")
-            dbg(to: handle, .error, "ok \(#line)")
-            dbg(to: handle, .info, "ok \(#line)")
-            dbg(to: handle, .all, "ok \(#line)")
+            dbg(to: handle, .warning, "ok")
+            dbg(to: handle, .error, "ok")
+            dbg(to: handle, .info, "ok")
+            dbg(to: handle, .all, "ok")
         }
+        
+        XCTAssertEqual(log,
+                            """
+                            debug-warning: ok
+                            debug-error: ok
+                            debug-info: ok
+                            debug-all: ok
+                            debug-warning: ok
+                            debug-error: ok
+                            debug-info: ok
+                            debug-all: ok
+                            debug-warning: ok
+                            debug-error: ok
+                            debug-info: ok
+                            debug-all: ok
+                            
+                            """
+        )
+        
     }
-    func test_codable_singlebitvalue() {
-        for i in 0..<MemoryLayout<UInt64>.size * 8 {
-            let bitvalue = SingleBitValue(position: i)
-            do {
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = .prettyPrinted
-                let encoded = try encoder.encode(bitvalue)
-                guard let _ = String(data: encoded, encoding: .utf8) else {
-                    XCTFail()
-                    return
-                }
-                let decoder = JSONDecoder()
-                let decoded = try decoder.decode(SingleBitValue.self, from: encoded)
-                XCTAssertEqual(bitvalue, decoded)
-            } catch let e {
-                print(e)
-                XCTFail()
-            }
-            do {
-                let encoder = PropertyListEncoder()
-                let encoded = try encoder.encode(bitvalue)
-                let decoder = PropertyListDecoder()
-                let decoded = try decoder.decode(SingleBitValue.self, from: encoded)
-                XCTAssertEqual(bitvalue, decoded)
-            } catch let e {
-                print(e)
-                XCTFail()
-            }
-        }
-        for i in 2..<MemoryLayout<UInt64>.size * 8 {
-            do {
-                let invalid = "{ \"value\": \(UInt64(SingleBitValue(position: i).value - 1)) }"
-                let decoder = JSONDecoder()
-                let decoded = try decoder.decode(SingleBitValue.self,
-                                                 from: invalid.data(using: .utf8)!)
-                XCTFail("\(i): \(UInt64(SingleBitValue(position: i).value - 1)) decoded = \(decoded)")
-            } catch let e {
-                XCTAssertTrue(type(of: e) is DecodingError.Type)
-            }
-        }
-    }
-    func test_codable_debugtopic() {
+}
+final class DebugTopicTests: XCTestCase {
+    func test_codable_debugtopic() throws {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             let encoded = try encoder.encode(DebugTopic.telemetry)
-            guard let _ = String(data: encoded, encoding: .utf8) else {
+            guard let s = String(data: encoded, encoding: .utf8) else {
                 XCTFail()
                 return
             }
+            print(s)
             let decoder = JSONDecoder()
             let decoded = try decoder.decode(DebugTopic.self, from: encoded)
             XCTAssertEqual(DebugTopic.telemetry, decoded)
-        } catch let e {
-            print(e)
-            XCTFail()
         }
         do {
             let encoder = PropertyListEncoder()
@@ -253,9 +362,137 @@ final class DebugKitTests: XCTestCase {
             let decoder = PropertyListDecoder()
             let decoded = try decoder.decode(DebugTopic.self, from: encoded)
             XCTAssertEqual(DebugTopic.telemetry, decoded)
-        } catch let e {
-            print(e)
-            XCTFail()
+        }
+        do {
+            let data = String(// expect to fail
+                "{ \"level\" : 64, \"label\" : \"level out of bounds\" }"
+            ).data(using: .utf8)!
+            let decoder = JSONDecoder()
+            let decoded = try? decoder.decode(DebugTopic.self, from: data)
+            XCTAssertNil(decoded)
+        }
+        do {
+            let data = String( // expect to fail
+                "{ \"level\" : -1, \"label\" : \"level out of bounds\" }"
+            ).data(using: .utf8)!
+            let decoder = JSONDecoder()
+            let decoded = try? decoder.decode(DebugTopic.self, from: data)
+            XCTAssertNil(decoded)
+        }
+    }
+}
+final class DebugTopicSetTests: XCTestCase {
+    func test_with_all_bit_values() {
+        for i in 0..<MemoryLayout<DebugTopic.BitValueType>.size * 8 {
+            let topic = DebugTopic(level: i, "a")
+            XCTAssertEqual(topic.level, i)
+            XCTAssertEqual(topic.label, "a")
+        }
+    }
+
+    func test_codable_debugtopicset() throws {
+        do {
+            let set:DebugTopicSet = [.info, .warning, .error, .telemetry, .labeledEmpty]
+            let topicSet = DebugTopicSet(set)
+            
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let encoded = try encoder.encode(topicSet)
+            /*guard let s = String(data: encoded, encoding: .utf8) else {
+             XCTFail()
+             return
+             }
+             print(s)*/
+            let decoder = JSONDecoder()
+            let decoded = try decoder.decode(DebugTopicSet.self, from: encoded)
+            XCTAssertEqual(set, decoded)
+        }
+        do {
+            let set:DebugTopicSet = .catchAll
+            let topicSet = DebugTopicSet(set)
+            
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let encoded = try encoder.encode(topicSet)
+            let decoder = JSONDecoder()
+            let decoded = try decoder.decode(DebugTopicSet.self, from: encoded)
+            XCTAssertEqual(set, decoded)
+        }
+    }
+}
+final class OneBitValueTests: XCTestCase {
+    func test_zero_position_and_zero() {
+        do {
+            let zero = OneBitValue<UInt8>()
+            XCTAssertTrue(zero.isZero)
+            XCTAssertEqual(zero.position, 8)
+        }
+        do {
+            let zero = OneBitValue<UInt32>.zero
+            XCTAssertTrue(zero.isZero)
+            XCTAssertEqual(zero.position, 32)
+        }
+        do {
+            let zero = OneBitValue<Int64>()
+            XCTAssertTrue(zero.isZero)
+            XCTAssertEqual(zero.position, 64)
+        }
+    }
+    func test_singlebitvalue() throws {
+        for i in 0..<MemoryLayout<DebugTopic.BitValueType>.size * 8 {
+            let bitvalue = OneBitValue<DebugTopic.BitValueType>(position: i)
+            XCTAssertEqual(bitvalue?.position, i)
+        }
+    }
+    func test_codable_singlebitvalue() throws {
+        do {
+            let encoder = JSONEncoder()
+            let bv = OneBitValue<Int8>(position: 4)!
+            let encoded = try encoder.encode(bv)
+            let decoder = JSONDecoder()
+            let decoded = try decoder.decode(OneBitValue<Int8>.self, from: encoded)
+            XCTAssertEqual(bv, decoded)
+        }
+        do {
+            let data = String(
+                "{ \"value\" : -1 }" // expect to fail
+            ).data(using: .utf8)!
+            let decoder = JSONDecoder()
+            let decoded = try? decoder.decode(DebugTopic.self, from: data)
+            XCTAssertNil(decoded)
+        }
+        do {
+            let data = String(
+                "{ \"value\" : 8 }" // expect to fail
+            ).data(using: .utf8)!
+            let decoder = JSONDecoder()
+            let decoded = try? decoder.decode(DebugTopic.self, from: data)
+            XCTAssertNil(decoded)
+        }
+        do {
+            for i in 0..<MemoryLayout<DebugTopic.BitValueType>.size * 8 {
+                let bitvalue = OneBitValue<DebugTopic.BitValueType>(position: i)
+                do {
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = .prettyPrinted
+                    let encoded = try encoder.encode(bitvalue)
+                    /*guard let s = String(data: encoded, encoding: .utf8) else {
+                     XCTFail()
+                     return
+                     }
+                     print(s)*/
+                    let decoder = JSONDecoder()
+                    let decoded = try decoder.decode(OneBitValue<DebugTopic.BitValueType>.self, from: encoded)
+                    XCTAssertEqual(bitvalue, decoded)
+                }
+                do {
+                    let encoder = PropertyListEncoder()
+                    let encoded = try encoder.encode(bitvalue)
+                    let decoder = PropertyListDecoder()
+                    let decoded = try decoder.decode(OneBitValue<DebugTopic.BitValueType>.self, from: encoded)
+                    XCTAssertEqual(bitvalue, decoded)
+                }
+            }
         }
     }
 }
