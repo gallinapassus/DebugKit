@@ -181,17 +181,17 @@ final class DebugKitTests: XCTestCase {
     }
     func test_formatting() {
         let tests:[((DebugTopic, String, String?, String?, String?, String), String)] = [
-            ((.info, "debug", nil, nil, nil, "kala"), "debuginfokala"),
-            ((.info, "debug", nil, nil, "\n", "kala"), "debuginfokala\n"),
-            ((.info, "DBG", nil, nil, "\n", "kala"), "DBGinfokala\n"),
-            ((.info, "", nil, nil, "\n", "kala"), "infokala\n"),
-            ((.critical, "debug", nil, nil, "\n", "kala"), "debug4kala\n"),
+            ((.info, "debug", nil, nil, nil, "kala"), "debugkala"),
+            ((.info, "debug", nil, nil, "\n", "kala"), "debugkala\n"),
+            ((.info, "DBG", nil, nil, "\n", "kala"), "DBGkala\n"),
+            ((.info, "", nil, nil, "\n", "kala"), "kala\n"),
+            ((.critical, "debug", nil, nil, "\n", "kala"), "debugkala\n"),
             ((.critical, "debug", "-", nil, "\n", "kala"), "debug-4kala\n"),
             ((.info, "debug", "-", nil, "\n", "kala"), "debug-infokala\n"),
             ((.info, "debug", "-", ">", "\n", "kala"), "debug-info>kala\n"),
-            ((.info, "debug", nil, ">", "\n", "kala"), "debuginfo>kala\n"),
-            ((.critical, "debug", nil, ">", "\n", "kala"), "debug4>kala\n"),
-            ((.critical, "", nil, nil, "\n", "kala"), "4kala\n"),
+            ((.info, "debug", nil, ">", "\n", "kala"), "debug>kala\n"),
+            ((.critical, "debug", nil, ">", "\n", "kala"), "debug>kala\n"),
+            ((.critical, "", nil, nil, "\n", "kala"), "kala\n"),
             ((.info, "debug", "_", ":", "[EOF]\n", "kala"), "debug_info:kala[EOF]\n"),
         ]
         var acc = ""
@@ -218,7 +218,7 @@ final class DebugKitTests: XCTestCase {
                             debug-info: message⮐
                             dbg_info: message
                             dbg-info->message
-                            dbginfo->message
+                            dbg->message
                             
                             """
         )
@@ -256,7 +256,7 @@ final class DebugKitTests: XCTestCase {
                             debug-4click
                             debug-4>click
                             debug:4: click
-                            debug4: click
+                            debug: click
                             
                             """
         )
@@ -339,6 +339,30 @@ final class DebugKitTests: XCTestCase {
                             """
         )
         
+    }
+    func test_dlog_unleveled() {
+        dlog(to: handle, "unleveled, timestamped")
+        XCTAssertEqual(log.dropFirst(20), "unleveled, timestamped\n")
+    }
+    func test_dlog_leveled() {
+        do {
+            dlog(to: handle, [.info], "log entry")
+            XCTAssertEqual(log.dropFirst(20), "[info]: log entry\n")
+        }
+    }
+    func test_dlog_multileveled() {
+        do {
+            dlog(to: handle, [.info, .error], "log entry")
+            let ee:[String] = [
+                "[info]: log entry",
+                "[error]: log entry",
+            ]
+            let arr:[String] = log.split(separator: "\n").map({ String($0) })
+            for (e,ee) in zip(arr, ee) {
+                let tail:String = String(e.dropFirst(20))
+                XCTAssertEqual(tail, ee)
+            }
+        }
     }
 }
 final class DebugTopicTests: XCTestCase {
