@@ -124,7 +124,6 @@ public func dlog(to handle: FileHandle? = FileHandle.standardError,
 public func dlog(to handle: FileHandle? = FileHandle.standardError,
                  _ level: DebugTopic,
                  _ mask: DebugTopicSet,
-                 labelSeparator: String? = "-",
                  messageSeparator: String? = ": ",
                  terminator:String? = "\n",
                  _ message: @autoclosure () -> String) {
@@ -137,7 +136,7 @@ public func dlog(to handle: FileHandle? = FileHandle.standardError,
     let pfx = "\(logTimestampFormatter.string(from: now)) [\(level.label ?? level.level.description)]"
     let data:Data = _dbgmsg(level,
                             prefix: pfx,
-                            labelSeparator: labelSeparator,
+                            labelSeparator: nil,
                             messageSeparator: messageSeparator,
                             terminator: terminator,
                             message())
@@ -151,13 +150,11 @@ public func dlog(to handle: FileHandle? = FileHandle.standardError,
 public func dlog(to handle: FileHandle? = FileHandle.standardError,
                  _ levels: [DebugTopic],
                  _ mask: DebugTopicSet,
-                 labelSeparator: String? = "-",
                  messageSeparator: String? = ": ",
                  terminator:String? = "\n",
                  _ message: @autoclosure () -> String) {
     levels.forEach { level in
         dlog(to: handle, level, mask,
-             labelSeparator: labelSeparator,
              messageSeparator: messageSeparator,
              terminator: terminator,
              message())
