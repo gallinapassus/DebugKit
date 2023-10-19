@@ -2,7 +2,7 @@ import Foundation
 import SemanticVersion
 
 /// DebugKit semantic version
-public let version = SemanticVersion(0, 0, 4)
+public let version = SemanticVersion(0, 0, 5)
 
 /// Send un-leveled debug information to `stderr` (unconditionally)
 public func dbg(to handle: FileHandle? = FileHandle.standardError,
@@ -97,6 +97,101 @@ public func dbg(to handle: FileHandle? = FileHandle.standardError,
             message())
     }
 }
+private let logTimestampFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale.current
+    f.timeZone = TimeZone.current
+    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    return f
+}()
+/// Send un-leveled timestamped logging information to `stderr` (unconditionally)
+public func dlog(to handle: FileHandle? = FileHandle.standardError,
+                 messageSeparator: String? = " ",
+                 terminator:String? = "\n",
+                 _ message: @autoclosure () -> String) {
+    guard let handle = handle else { return }
+    let now = Date()
+    let pfx = "\(logTimestampFormatter.string(from: now))"
+    let data = _dbgmsg(.all,
+                       prefix: pfx,
+                       labelSeparator: nil,
+                       messageSeparator: messageSeparator,
+                       terminator: terminator,
+                       message())
+    _write(to: handle, data)
+}
+/// Send timestamped logging information conditionally to file handle (default `stderr`)
+public func dlog(to handle: FileHandle? = FileHandle.standardError,
+                 _ level: DebugTopic,
+                 _ mask: DebugTopicSet,
+                 labelSeparator: String? = "-",
+                 messageSeparator: String? = ": ",
+                 terminator:String? = "\n",
+                 _ message: @autoclosure () -> String) {
+    
+    guard let handle = handle else { return }
+    guard mask.contains(level) || mask.isCatchAll else {
+        return
+    }
+    let now = Date()
+    let pfx = "\(logTimestampFormatter.string(from: now)) [\(level.label ?? level.level.description)]"
+    let data:Data = _dbgmsg(level,
+                            prefix: pfx,
+                            labelSeparator: labelSeparator,
+                            messageSeparator: messageSeparator,
+                            terminator: terminator,
+                            message())
+    _write(to: handle, data)
+}
+/// Send timestamped logging information conditionally to multiple topics at once
+///
+/// Example:
+///
+///     dlog([.info, .warning, .error], "topic is active")
+public func dlog(to handle: FileHandle? = FileHandle.standardError,
+                 _ levels: [DebugTopic],
+                 _ mask: DebugTopicSet,
+                 labelSeparator: String? = "-",
+                 messageSeparator: String? = ": ",
+                 terminator:String? = "\n",
+                 _ message: @autoclosure () -> String) {
+    levels.forEach { level in
+        dlog(to: handle, level, mask,
+             labelSeparator: labelSeparator,
+             messageSeparator: messageSeparator,
+             terminator: terminator,
+             message())
+    }
+}
+/// Send timestamped logging information unconditionally to file handle (default `stderr`)
+public func dlog(to handle: FileHandle? = FileHandle.standardError,
+                 _ level: DebugTopic,
+                 messageSeparator: String? = ": ",
+                 terminator:String? = "\n",
+                 _ message: @autoclosure () -> String) {
+    guard let handle = handle else { return }
+    let now = Date()
+    let pfx = "\(logTimestampFormatter.string(from: now)) [\(level.label ?? level.level.description)]"
+    let data:Data = _dbgmsg(
+        level,
+        prefix: pfx,
+        labelSeparator: nil,
+        messageSeparator: messageSeparator,
+        terminator: terminator,
+        message())
+    _write(to: handle, data)
+}
+/// Send timestamped logging information unconditionally to file handle (default `stderr`)
+public func dlog(to handle: FileHandle? = FileHandle.standardError,
+                 _ levels: [DebugTopic],
+                 messageSeparator: String? = ": ",
+                 terminator:String? = "\n",
+                 _ message: @autoclosure () -> String) {
+    guard let handle = handle else { return }
+    levels.forEach { level in
+        dlog(to: handle, level, messageSeparator: messageSeparator, terminator: terminator, message())
+    }
+}
 /// Get debug message as `Data`
 @inline(__always)
 fileprivate func _dbgmsg(_ level:DebugTopic,
@@ -110,17 +205,19 @@ fileprivate func _dbgmsg(_ level:DebugTopic,
     if prefix.isEmpty == false {
         concat.append(prefix)
     }
-    if let label = level.label {
-        if let labelSep = labelSeparator {
+    // label and labelSeparator are written
+    // *only if* labelSeparator != nil
+    if let labelSep = labelSeparator {
+        if let label = level.label {
             concat.append(labelSep)
+            // write label (string)
+            concat.append(label)
         }
-        concat.append(label)
-    }
-    else {
-        if let labelSep = labelSeparator {
+        else {
             concat.append(labelSep)
+            // write label level (int)
+            concat.append(level.level.description)
         }
-        concat.append(level.level.description)
     }
     if let msgSeparator = messageSeparator {
         concat.append(msgSeparator)
