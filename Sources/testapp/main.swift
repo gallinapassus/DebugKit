@@ -35,10 +35,12 @@ struct ArgumentModel : ParsableCommand {
         dbg(.info, mask, "Selected debug topics: \(mask.description)")
 
         do {
+            dlog(.info, mask, "reading file \(file)")
             let content = try Data(contentsOf: URL(fileURLWithPath: file))
             dbg(.info, mask, "'\(file)' \(content.description)")
         } catch let e {
             dbg(.error, mask, e.localizedDescription)
+            dlog(.error, mask, "failed, \(e.localizedDescription)")
         }
     }
 }
